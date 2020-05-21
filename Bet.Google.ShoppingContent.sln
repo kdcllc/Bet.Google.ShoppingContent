@@ -1,0 +1,65 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30114.105
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GoogleShoppingApp", "src\GoogleShoppingApp\GoogleShoppingApp.csproj", "{E1BB0122-8058-4B52-B9A7-73E541E509FD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{5FEF9276-5C0A-452E-BA0B-779EA58F6F3B}"
+	ProjectSection(SolutionItems) = preProject
+		src\.editorconfig = src\.editorconfig
+		.gitattributes = .gitattributes
+		.gitignore = .gitignore
+		appveyor.yml = appveyor.yml
+		Directory.Build.props = Directory.Build.props
+		Directory.Build.targets = Directory.Build.targets
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Bet.Google.ShoppingContent", "src\Bet.Google.ShoppingContent\Bet.Google.ShoppingContent.csproj", "{75EC1719-E3A4-4436-B336-072592A24C37}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A5F0A8AE-1DFD-4AF0-AD70-2CEFE9A07076}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bet.Google.ShoppingContent.UnitTest", "test\Bet.Google.ShoppingContent.UnitTest\Bet.Google.ShoppingContent.UnitTest.csproj", "{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{CE933E5A-F07D-46C7-BA58-EF98642013AD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "build", "build", "{F5C31C03-7EBD-435F-AE39-3C78BFC7264C}"
+	ProjectSection(SolutionItems) = preProject
+		build\dependencies.props = build\dependencies.props
+		build\settings.props = build\settings.props
+		build\sources.props = build\sources.props
+	EndProjectSection
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E1BB0122-8058-4B52-B9A7-73E541E509FD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1BB0122-8058-4B52-B9A7-73E541E509FD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1BB0122-8058-4B52-B9A7-73E541E509FD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1BB0122-8058-4B52-B9A7-73E541E509FD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{75EC1719-E3A4-4436-B336-072592A24C37}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{75EC1719-E3A4-4436-B336-072592A24C37}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{75EC1719-E3A4-4436-B336-072592A24C37}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{75EC1719-E3A4-4436-B336-072592A24C37}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E1BB0122-8058-4B52-B9A7-73E541E509FD} = {A5F0A8AE-1DFD-4AF0-AD70-2CEFE9A07076}
+		{75EC1719-E3A4-4436-B336-072592A24C37} = {A5F0A8AE-1DFD-4AF0-AD70-2CEFE9A07076}
+		{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC} = {CE933E5A-F07D-46C7-BA58-EF98642013AD}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {9C5F4339-8A47-4264-B4BC-F3F73A6626D2}
+	EndGlobalSection
+EndGlobal
