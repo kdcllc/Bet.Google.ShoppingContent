@@ -12,14 +12,14 @@ using Microsoft.Extensions.Options;
 
 namespace Bet.Google.ShoppingContent.Services
 {
-    public class MerchantConfigService
+    public class MerchantConfigService : IMerchantConfigService
     {
-        private readonly AppsOptions _options;
+        private readonly GoogleShoppingOptions _options;
         private readonly ShoppingContentService _contentService;
         private readonly ILogger<MerchantConfigService> _logger;
 
         public MerchantConfigService(
-            IOptions<AppsOptions> options,
+            IOptions<GoogleShoppingOptions> options,
             ShoppingContentService contentService,
             ILogger<MerchantConfigService> logger)
         {

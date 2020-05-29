@@ -21,7 +21,7 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Bet.Google.ShoppingContent"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A5F0A8AE-1DFD-4AF0-AD70-2CEFE9A07076}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bet.Google.ShoppingContent.UnitTest", "test\Bet.Google.ShoppingContent.UnitTest\Bet.Google.ShoppingContent.UnitTest.csproj", "{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Bet.Google.ShoppingContent.UnitTest", "test\Bet.Google.ShoppingContent.UnitTest\Bet.Google.ShoppingContent.UnitTest.csproj", "{CA28DB78-83A6-4C7E-96F0-BE65AA5A6DBC}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{CE933E5A-F07D-46C7-BA58-EF98642013AD}"
 EndProject

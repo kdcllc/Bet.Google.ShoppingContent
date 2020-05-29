@@ -1,14 +1,11 @@
 ﻿using System;
-using System.IO;
+using System.Collections.Generic;
 using System.Linq;
-using System.Text.Json;
 using System.Threading.Tasks;
 
-using Bet.Google.ShoppingContent.Options;
 using Bet.Google.ShoppingContent.Services;
 
-using Google.Apis.Services;
-using Google.Apis.ShoppingContent.v2_1;
+using Google.Apis.ShoppingContent.v2_1.Data;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,34 +29,7 @@ namespace Bet.Google.ShoppingContent
                     })
                     .ConfigureServices((hostContext, services) =>
                     {
-                        // configure options
-                        services.AddOptions<AppsOptions>().Configure<IConfiguration>((o, c) =>
-                        {
-                            c.Bind("AppsOptions", o);
-
-                            if (!string.IsNullOrEmpty(o.GoogleServiceAccountFile)
-                                && File.Exists(o.GoogleServiceAccountFile))
-                            {
-                                o.GoogleServiceAccount = File.ReadAllBytes(o.GoogleServiceAccountFile);
-                            }
-                        });
-
-                        services.AddScoped<AuthenticationService>();
-
-                        services.AddScoped<ShoppingContentService>(sp =>
-                        {
-                            var authetnicator = sp.GetRequiredService<AuthenticationService>();
-                            var init = new BaseClientService.Initializer()
-                            {
-                                HttpClientInitializer = authetnicator.AuthenticateAsync(ShoppingContentService.Scope.Content).GetAwaiter().GetResult(),
-                                ApplicationName = nameof(ShoppingContent),
-                            };
-
-                            return new ShoppingContentService(init);
-                        });
-
-                        services.AddScoped<ProductService>();
-                        services.AddScoped<MerchantConfigService>();
+                        services.AddGoogleShoppingContent();
                     })
                     .UseConsoleLifetime()
                     .Build();
@@ -68,25 +38,36 @@ namespace Bet.Google.ShoppingContent
 
             using var scope = host.Services.CreateScope();
             var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+
             logger.LogInformation("[App][Started]");
+
             var appLifeTime = scope.ServiceProvider.GetRequiredService<IHostApplicationLifetime>();
 
-            var merchantAccount = scope.ServiceProvider.GetRequiredService<MerchantConfigService>();
-
+            var merchantAccount = scope.ServiceProvider.GetRequiredService<IMerchantConfigService>();
             var shipping = await merchantAccount.GetShippingSettingsAsync(appLifeTime.ApplicationStopping);
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "shipping.json"), JsonSerializer.Serialize(shipping));
 
+            // File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "shipping.json"), JsonSerializer.Serialize(shipping));
             var configMerch = await merchantAccount.GetAsync(appLifeTime.ApplicationStopping);
 
-            var productService = scope.ServiceProvider.GetRequiredService<ProductService>();
+            var productService = scope.ServiceProvider.GetRequiredService<IProductService>();
 
-            var products = await productService.GetProducts(appLifeTime.ApplicationStopping);
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "products.json"), JsonSerializer.Serialize(products));
+            var products = await productService.GetAllAsync(appLifeTime.ApplicationStopping);
 
-            var groupedBy = products.GroupBy(g => new { g.ShippingLabel }).Select(g => g.First()).ToList();
-            File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "groupedBy.json"), JsonSerializer.Serialize(groupedBy));
-
+            // File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "products.json"), JsonSerializer.Serialize(products));
             logger.LogInformation("Total products count {count}", products.Count);
+
+            var prodStatus = await productService.GetAllStatusAsync(appLifeTime.ApplicationStopping);
+            var invalid = prodStatus.Where(x => x.ItemLevelIssues != null);
+
+            var i = 0;
+            var dic = products.Take(10).ToDictionary(_ => (long)++i, p => p.Id);
+
+            var test = await productService.GetStatusAsync(dic, appLifeTime.ApplicationStopping);
+
+            foreach (var st in invalid)
+            {
+                PrintStatus(st, logger);
+            }
 
             await Task.Delay(TimeSpan.FromSeconds(10));
 
@@ -94,6 +75,36 @@ namespace Bet.Google.ShoppingContent
 
             await host.StopAsync();
             return 0;
+        }
+
+        private static void PrintStatus(ProductStatus status, ILogger<Program> logger)
+        {
+            logger.LogInformation("Information for product {0}:", status.ProductId);
+            logger.LogInformation("- Title: {0}", status.Title);
+
+            logger.LogInformation("- Destination statuses:");
+            foreach (var stat in status.DestinationStatuses)
+            {
+                logger.LogInformation("  - {0}: {1}", stat.Destination, stat.Status);
+            }
+
+            if (status.ItemLevelIssues == null)
+            {
+                logger.LogInformation("- No issues.");
+            }
+            else
+            {
+                var issues = status.ItemLevelIssues;
+                logger.LogInformation("- There are {0} issues:", issues.Count);
+                foreach (var issue in issues)
+                {
+                    logger.LogInformation("  - Code: {0}", issue.Code);
+                    logger.LogInformation("    Description: {0}", issue.Description);
+                    logger.LogInformation("    Detailed description: {0}", issue.Detail);
+                    logger.LogInformation("    Resolution: {0}", issue.Resolution);
+                    logger.LogInformation("    Servability: {0}", issue.Servability);
+                }
+            }
         }
     }
 }
