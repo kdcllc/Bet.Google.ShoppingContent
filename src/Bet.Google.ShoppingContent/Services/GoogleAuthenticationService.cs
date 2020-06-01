@@ -12,14 +12,14 @@ using Microsoft.Extensions.Options;
 
 namespace Bet.Google.ShoppingContent.Services
 {
-    public class AuthenticationService : IAuthenticationService
+    public class GoogleAuthenticationService : IGoogleAuthenticationService
     {
         private readonly GoogleShoppingOptions _options;
-        private readonly ILogger<AuthenticationService> _logger;
+        private readonly ILogger<GoogleAuthenticationService> _logger;
 
-        public AuthenticationService(
+        public GoogleAuthenticationService(
             IOptions<GoogleShoppingOptions> options,
-            ILogger<AuthenticationService> logger)
+            ILogger<GoogleAuthenticationService> logger)
         {
             _options = options.Value;
             _logger = logger;

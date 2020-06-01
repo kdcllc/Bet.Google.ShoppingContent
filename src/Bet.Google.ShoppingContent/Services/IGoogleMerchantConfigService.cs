@@ -5,9 +5,9 @@ using Google.Apis.ShoppingContent.v2_1.Data;
 
 namespace Bet.Google.ShoppingContent.Services
 {
-    public interface IMerchantConfigService
+    public interface IGoogleMerchantConfigService
     {
-        Task<MerchantConfig> GetAsync(CancellationToken cancellationToken);
+        Task<GoogleMerchantConfig> GetAsync(CancellationToken cancellationToken);
 
         Task<ShippingSettings> GetShippingSettingsAsync(CancellationToken cancellationToken);
     }

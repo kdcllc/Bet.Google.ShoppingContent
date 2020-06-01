@@ -12,23 +12,23 @@ using Microsoft.Extensions.Options;
 
 namespace Bet.Google.ShoppingContent.Services
 {
-    public class MerchantConfigService : IMerchantConfigService
+    public class GoogleMerchantConfigService : IGoogleMerchantConfigService
     {
         private readonly GoogleShoppingOptions _options;
         private readonly ShoppingContentService _contentService;
-        private readonly ILogger<MerchantConfigService> _logger;
+        private readonly ILogger<GoogleMerchantConfigService> _logger;
 
-        public MerchantConfigService(
+        public GoogleMerchantConfigService(
             IOptions<GoogleShoppingOptions> options,
             ShoppingContentService contentService,
-            ILogger<MerchantConfigService> logger)
+            ILogger<GoogleMerchantConfigService> logger)
         {
             _options = options.Value;
             _contentService = contentService ?? throw new ArgumentNullException(nameof(contentService));
             _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         }
 
-        public async Task<MerchantConfig> GetAsync(CancellationToken cancellationToken)
+        public async Task<GoogleMerchantConfig> GetAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("Retrieving information for authenticated user.");
             var authinfo = await _contentService.Accounts.Authinfo().ExecuteAsync(cancellationToken);
@@ -38,13 +38,13 @@ namespace Bet.Google.ShoppingContent.Services
                 throw new ArgumentException("Authenticated user has no access to any Merchant Center accounts.");
             }
 
-            var config = new MerchantConfig();
+            var config = new GoogleMerchantConfig();
 
             var firstAccount = authinfo.AccountIdentifiers[0];
             config.MerchantId = firstAccount.MerchantId ?? firstAccount.AggregatorId;
             _logger.LogInformation("Using Merchant Center {merchantId} for running samples.", config.MerchantId.GetValueOrDefault());
 
-            var merchantId = config?.MerchantId.GetValueOrDefault();
+            var merchantId = config.MerchantId ?? 0;
 
             // We detect whether the requested Merchant Center ID is an MCA by checking
             // Accounts.authinfo(). If it is an MCA, then the authenticated user must be

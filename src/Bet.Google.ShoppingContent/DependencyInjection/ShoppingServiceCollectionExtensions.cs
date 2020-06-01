@@ -18,7 +18,7 @@ namespace Microsoft.Extensions.DependencyInjection
         /// </summary>
         /// <param name="services">The DI services.</param>
         /// <param name="sectionName">The section name in the configuration provider.</param>
-        /// <param name="configureOptions">The </param>
+        /// <param name="configureOptions">The configuration options.</param>
         /// <returns></returns>
         public static IServiceCollection AddGoogleShoppingContent(
             this IServiceCollection services,
@@ -42,13 +42,13 @@ namespace Microsoft.Extensions.DependencyInjection
                     });
 
             services.AddLogging();
-            services.AddScoped<IAuthenticationService, AuthenticationService>();
-            services.AddScoped<IProductService, ProductService>();
-            services.AddScoped<IMerchantConfigService, MerchantConfigService>();
+            services.AddScoped<IGoogleAuthenticationService, GoogleAuthenticationService>();
+            services.AddScoped<IGoogleProductService, GoogleProductService>();
+            services.AddScoped<IGoogleMerchantConfigService, GoogleMerchantConfigService>();
 
             services.AddScoped(sp =>
             {
-                var authetnicator = sp.GetRequiredService<IAuthenticationService>();
+                var authetnicator = sp.GetRequiredService<IGoogleAuthenticationService>();
                 var init = new BaseClientService.Initializer()
                 {
                     HttpClientInitializer = authetnicator.AuthenticateAsync(ShoppingContentService.Scope.Content).GetAwaiter().GetResult(),

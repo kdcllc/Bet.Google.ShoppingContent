@@ -1,6 +1,6 @@
 ﻿namespace Bet.Google.ShoppingContent.Services
 {
-    public class MerchantConfig
+    public class GoogleMerchantConfig
     {
         public ulong? MerchantId { get; set; }
 

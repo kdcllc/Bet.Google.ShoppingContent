@@ -1,5 +1,7 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 using Bet.Google.ShoppingContent.Options;
@@ -13,22 +15,22 @@ using Microsoft.Extensions.Options;
 namespace Bet.Google.ShoppingContent.Services
 {
     /// <inheritdoc/>
-    public class ProductService : IProductService
+    public class GoogleProductService : IGoogleProductService
     {
         private readonly GoogleShoppingOptions _options;
         private readonly ShoppingContentService _contentService;
-        private readonly ILogger<ProductService> _logger;
+        private readonly ILogger<GoogleProductService> _logger;
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="ProductService"/> class.
+        /// Initializes a new instance of the <see cref="GoogleProductService"/> class.
         /// </summary>
         /// <param name="options"></param>
         /// <param name="contentService"></param>
         /// <param name="logger"></param>
-        public ProductService(
+        public GoogleProductService(
             IOptions<GoogleShoppingOptions> options,
             ShoppingContentService contentService,
-            ILogger<ProductService> logger)
+            ILogger<GoogleProductService> logger)
         {
             _options = options.Value;
             _contentService = contentService ?? throw new System.ArgumentNullException(nameof(contentService));
@@ -42,7 +44,7 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public async Task<IList<Product>> GetAllAsync(CancellationToken cancellationToken)
+        public async Task<IList<Product>> GetAsync(CancellationToken cancellationToken)
         {
             string? pageToken = null;
             var result = new List<Product>();
@@ -72,7 +74,54 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public async Task<IList<ProductStatus>> GetAllStatusAsync(CancellationToken cancellationToken)
+        public ChannelReader<Product> GetChannelAsync(CancellationToken cancellationToken)
+        {
+            var output = Channel.CreateUnbounded<Product>();
+            Task.Run(async () =>
+            {
+                try
+                {
+                    string? pageToken = null;
+                    do
+                    {
+                        var accountRequest = _contentService.Products.List(_options.MerchantId);
+                        accountRequest.MaxResults = _options.MaxListPageSize;
+                        accountRequest.PageToken = pageToken;
+
+                        var productsResponse = await accountRequest.ExecuteAsync(cancellationToken);
+
+                        if (productsResponse.Resources != null && productsResponse.Resources.Count != 0)
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                            {
+                                break;
+                            }
+
+                            foreach (var item in productsResponse.Resources)
+                            {
+                                await output.Writer.WriteAsync(item, cancellationToken);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("No products found.");
+                        }
+
+                        pageToken = productsResponse.NextPageToken;
+                    }
+                    while (pageToken != null);
+                }
+                finally
+                {
+                    output.Writer.Complete();
+                }
+            });
+
+            return output;
+        }
+
+        /// <inheritdoc/>
+        public async Task<IList<ProductStatus>> GetStatusesAsync(CancellationToken cancellationToken)
         {
             string? pageToken = null;
             var result = new List<ProductStatus>();
@@ -84,7 +133,8 @@ namespace Bet.Google.ShoppingContent.Services
 
                 var productsResponse = await accountRequest.ExecuteAsync(cancellationToken);
 
-                if (productsResponse.Resources != null && productsResponse.Resources.Count != 0)
+                if (productsResponse.Resources != null
+                    && productsResponse.Resources.Count != 0)
                 {
                     result.AddRange(productsResponse.Resources);
                 }
@@ -107,9 +157,11 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public async Task<IDictionary<long, Product>> UpInsertBatchAsync(IDictionary<long, Product> productList, CancellationToken cancellationToken)
+        public async Task<IDictionary<long, (Product product, Errors errors)>> UpInsertBatchAsync(
+            IDictionary<long, Product> productList,
+            CancellationToken cancellationToken)
         {
-            var result = new Dictionary<long, Product>();
+            var result = new Dictionary<long, (Product product, Errors errors)>();
 
             var batchRequest = new ProductsCustomBatchRequest
             {
@@ -118,7 +170,6 @@ namespace Bet.Google.ShoppingContent.Services
 
             foreach (var item in productList)
             {
-
                 var entry = new ProductsCustomBatchRequestEntry
                 {
                     BatchId = item.Key,
@@ -136,7 +187,7 @@ namespace Bet.Google.ShoppingContent.Services
                 for (var i = 0; i < response.Entries.Count; i++)
                 {
                     var insertedProduct = response.Entries[i].Product;
-                    result.Add(response.Entries[i].BatchId ?? 0, insertedProduct);
+                    result.Add(response.Entries[i].BatchId ?? 0, (insertedProduct, response.Entries[i].Errors));
                 }
             }
             else
@@ -213,7 +264,7 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public async Task<IDictionary<long, ProductStatus>> GetStatusAsync(IDictionary<long, string> productList, CancellationToken cancellationToken)
+        public async Task<IDictionary<long, ProductStatus>> GetStatusesAsync(IDictionary<long, string> productList, CancellationToken cancellationToken)
         {
             var result = new Dictionary<long, ProductStatus>();
 
@@ -250,6 +301,109 @@ namespace Bet.Google.ShoppingContent.Services
             }
 
             return result;
+        }
+
+        /// <inheritdoc/>
+        public ChannelReader<(long batchId, ProductStatus productStatus)> GetStatusesChannelAsync(
+            ChannelReader<(long batchId, string productId)> channel,
+            CancellationToken cancellationToken)
+        {
+            var output = Channel.CreateUnbounded<(long, ProductStatus)>();
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var batchRequest = new ProductstatusesCustomBatchRequest
+                    {
+                        Entries = new List<ProductstatusesCustomBatchRequestEntry>()
+                    };
+
+                    while (await channel.WaitToReadAsync(cancellationToken))
+                    {
+                        var (batchId, productId) = await channel.ReadAsync(cancellationToken);
+
+                        var entry = new ProductstatusesCustomBatchRequestEntry
+                        {
+                            BatchId = batchId,
+                            MerchantId = _options.MerchantId,
+                            Method = "get",
+                            ProductId = productId
+                        };
+                        batchRequest.Entries.Add(entry);
+                    }
+
+                    var response = await _contentService.Productstatuses.Custombatch(batchRequest).ExecuteAsync(cancellationToken);
+
+                    if (response.Kind == "content#productstatusesCustomBatchResponse")
+                    {
+                        for (var i = 0; i < response.Entries.Count; i++)
+                        {
+                            var productStatus = response.Entries[i].ProductStatus;
+                            await output.Writer.WriteAsync((response.Entries[i].BatchId ?? 0, productStatus), cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogDebug("There was an error. Response: {responseCode}", response.ToString());
+                    }
+                }
+                finally
+                {
+                    output.Writer.Complete();
+                }
+            });
+
+            return output;
+        }
+
+        /// <inheritdoc/>
+        public ChannelReader<ProductStatus> GetStatusesChannelAsync(CancellationToken cancellationToken)
+        {
+            var output = Channel.CreateUnbounded<ProductStatus>();
+
+            Task.Run(async () =>
+            {
+                string? pageToken = null;
+                try
+                {
+                    do
+                    {
+                        var accountRequest = _contentService.Productstatuses.List(_options.MerchantId);
+                        accountRequest.MaxResults = _options.MaxListPageSize;
+                        accountRequest.PageToken = pageToken;
+
+                        var productsResponse = await accountRequest.ExecuteAsync(cancellationToken);
+
+                        if (productsResponse.Resources != null
+                            && productsResponse.Resources.Count != 0)
+                        {
+                            if (cancellationToken.IsCancellationRequested)
+                            {
+                                break;
+                            }
+
+                            foreach (var item in productsResponse.Resources)
+                            {
+                                await output.Writer.WriteAsync(item, cancellationToken);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogInformation("No accounts found.");
+                        }
+
+                        pageToken = productsResponse.NextPageToken;
+                    }
+                    while (pageToken != null);
+                }
+                finally
+                {
+                    output.Writer.Complete();
+                }
+            });
+
+            return output;
         }
     }
 }

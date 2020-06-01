@@ -1,18 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
-
-using Bet.Google.ShoppingContent.Services;
-
-using Google.Apis.ShoppingContent.v2_1.Data;
 
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Bet.Google.ShoppingContent
+namespace GoogleShoppingApp
 {
     internal sealed class Program
     {
@@ -30,6 +25,8 @@ namespace Bet.Google.ShoppingContent
                     .ConfigureServices((hostContext, services) =>
                     {
                         services.AddGoogleShoppingContent();
+                        services.AddScoped<MerchantDemo>();
+                        services.AddScoped<ProductDemo>();
                     })
                     .UseConsoleLifetime()
                     .Build();
@@ -41,70 +38,39 @@ namespace Bet.Google.ShoppingContent
 
             logger.LogInformation("[App][Started]");
 
-            var appLifeTime = scope.ServiceProvider.GetRequiredService<IHostApplicationLifetime>();
+            // 1. Merchant Account Demos
+            var merchantDemo = scope.ServiceProvider.GetRequiredService<MerchantDemo>();
 
-            var merchantAccount = scope.ServiceProvider.GetRequiredService<IMerchantConfigService>();
-            var shipping = await merchantAccount.GetShippingSettingsAsync(appLifeTime.ApplicationStopping);
+            // 1.1 retrieves and saves merchant account info
+            await merchantDemo.GetMerchantAccountInfoAsync(saveToFile: false);
 
-            // File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "shipping.json"), JsonSerializer.Serialize(shipping));
-            var configMerch = await merchantAccount.GetAsync(appLifeTime.ApplicationStopping);
+            // 1.2 retrieves and saves merchant shipping info
+            await merchantDemo.GetMerchantAccountShippingAsync(saveToFile: false);
 
-            var productService = scope.ServiceProvider.GetRequiredService<IProductService>();
+            // 2. Product Demos
+            var productDemo = scope.ServiceProvider.GetRequiredService<ProductDemo>();
 
-            var products = await productService.GetAllAsync(appLifeTime.ApplicationStopping);
-
-            // File.WriteAllText(Path.Combine(AppContext.BaseDirectory, "products.json"), JsonSerializer.Serialize(products));
+            // 2.1 Get timed list
+            using var cts = new CancellationTokenSource();
+            cts.CancelAfter(TimeSpan.FromSeconds(1));
+            var products = await productDemo.GetProductsAsync(false, cts.Token);
             logger.LogInformation("Total products count {count}", products.Count);
 
-            var prodStatus = await productService.GetAllStatusAsync(appLifeTime.ApplicationStopping);
-            var invalid = prodStatus.Where(x => x.ItemLevelIssues != null);
+            // 2.2 Get Product Status
+            var productStatus = await productDemo.GetProductStatusesAsync(10, products, false);
+            logger.LogInformation("Total products statuses count {count}", productStatus.Count);
 
-            var i = 0;
-            var dic = products.Take(10).ToDictionary(_ => (long)++i, p => p.Id);
+            // 2.3 Get Product Statuses
+            var produtStatusesList = await productDemo.GetProductsWithErrorsAsync();
+            logger.LogInformation("Total products with error statuses count {count}", produtStatusesList.Count);
 
-            var test = await productService.GetStatusAsync(dic, appLifeTime.ApplicationStopping);
-
-            foreach (var st in invalid)
-            {
-                PrintStatus(st, logger);
-            }
-
-            await Task.Delay(TimeSpan.FromSeconds(10));
+            // logger.LogError(string.Join(",", item.ItemLevelIssues.Select(x => x.Detail)));
+            await Task.Delay(TimeSpan.FromSeconds(5));
 
             logger.LogInformation("[App][Stopped]");
 
             await host.StopAsync();
             return 0;
-        }
-
-        private static void PrintStatus(ProductStatus status, ILogger<Program> logger)
-        {
-            logger.LogInformation("Information for product {0}:", status.ProductId);
-            logger.LogInformation("- Title: {0}", status.Title);
-
-            logger.LogInformation("- Destination statuses:");
-            foreach (var stat in status.DestinationStatuses)
-            {
-                logger.LogInformation("  - {0}: {1}", stat.Destination, stat.Status);
-            }
-
-            if (status.ItemLevelIssues == null)
-            {
-                logger.LogInformation("- No issues.");
-            }
-            else
-            {
-                var issues = status.ItemLevelIssues;
-                logger.LogInformation("- There are {0} issues:", issues.Count);
-                foreach (var issue in issues)
-                {
-                    logger.LogInformation("  - Code: {0}", issue.Code);
-                    logger.LogInformation("    Description: {0}", issue.Description);
-                    logger.LogInformation("    Detailed description: {0}", issue.Detail);
-                    logger.LogInformation("    Resolution: {0}", issue.Resolution);
-                    logger.LogInformation("    Servability: {0}", issue.Servability);
-                }
-            }
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 
 using Google.Apis.ShoppingContent.v2_1.Data;
@@ -9,7 +10,7 @@ namespace Bet.Google.ShoppingContent.Services
     /// <summary>
     /// Google Shopping Content for Products in the Catalog.
     /// </summary>
-    public interface IProductService
+    public interface IGoogleProductService
     {
         /// <summary>
         /// Delete the Product from Google Shopping Content.
@@ -32,14 +33,23 @@ namespace Bet.Google.ShoppingContent.Services
         /// </summary>
         /// <param name="cancellationToken">The CancellationToken.</param>
         /// <returns></returns>
-        Task<IList<Product>> GetAllAsync(CancellationToken cancellationToken);
+        Task<IList<Product>> GetAsync(CancellationToken cancellationToken);
+
+        ChannelReader<Product> GetChannelAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Get All Product Statues listed on Google Shopping Content.
         /// </summary>
         /// <param name="cancellationToken">The CancellationToken.</param>
         /// <returns></returns>
-        Task<IList<ProductStatus>> GetAllStatusAsync(CancellationToken cancellationToken);
+        Task<IList<ProductStatus>> GetStatusesAsync(CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Get Product Statuses.
+        /// </summary>
+        /// <param name="cancellationToken">The cancellation token.</param>
+        /// <returns></returns>
+        ChannelReader<ProductStatus> GetStatusesChannelAsync(CancellationToken cancellationToken);
 
         /// <summary>
         /// Get A Product listed on Google Shopping Content.
@@ -50,12 +60,20 @@ namespace Bet.Google.ShoppingContent.Services
         Task<Product> GetAsync(string productId, CancellationToken cancellationToken);
 
         /// <summary>
-        /// Get All Product Statutes based on the list of products.
+        /// Get Product Statutes based on the list of products.
         /// </summary>
         /// <param name="productList">The list of products.</param>
         /// <param name="cancellationToken">The CancellationToken.</param>
         /// <returns></returns>
-        Task<IDictionary<long, ProductStatus>> GetStatusAsync(IDictionary<long, string> productList, CancellationToken cancellationToken);
+        Task<IDictionary<long, ProductStatus>> GetStatusesAsync(IDictionary<long, string> productList, CancellationToken cancellationToken);
+
+        /// <summary>
+        /// Get Product Statues based on the list of products.
+        /// </summary>
+        /// <param name="channel"></param>
+        /// <param name="cancellation"></param>
+        /// <returns></returns>
+        public ChannelReader<(long batchId, ProductStatus productStatus)> GetStatusesChannelAsync(ChannelReader<(long batchId, string productId)> channel, CancellationToken cancellation);
 
         /// <summary>
         /// Get Status for specific product id.
@@ -79,6 +97,6 @@ namespace Bet.Google.ShoppingContent.Services
         /// <param name="productList"></param>
         /// <param name="cancellationToken">The CancellationToken.</param>
         /// <returns></returns>
-        Task<IDictionary<long, Product>> UpInsertBatchAsync(IDictionary<long, Product> productList, CancellationToken cancellationToken);
+        Task<IDictionary<long, (Product product, Errors errors)>> UpInsertBatchAsync(IDictionary<long, Product> productList, CancellationToken cancellationToken);
     }
 }
