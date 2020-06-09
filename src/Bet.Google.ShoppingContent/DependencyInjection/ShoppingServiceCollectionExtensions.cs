@@ -52,7 +52,7 @@ namespace Microsoft.Extensions.DependencyInjection
                 var init = new BaseClientService.Initializer()
                 {
                     HttpClientInitializer = authetnicator.AuthenticateAsync(ShoppingContentService.Scope.Content).GetAwaiter().GetResult(),
-                    ApplicationName = nameof(Bet.Google.ShoppingContent),
+                    ApplicationName = nameof(Bet.Google.ShoppingContent)
                 };
 
                 return new ShoppingContentService(init);

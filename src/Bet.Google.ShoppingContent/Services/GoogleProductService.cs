@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 
 using Bet.Google.ShoppingContent.Options;
 
+using Google.Apis.Discovery;
 using Google.Apis.ShoppingContent.v2_1;
 using Google.Apis.ShoppingContent.v2_1.Data;
 
@@ -51,11 +52,11 @@ namespace Bet.Google.ShoppingContent.Services
 
             do
             {
-                var accountRequest = _contentService.Products.List(_options.MerchantId);
-                accountRequest.MaxResults = _options.MaxListPageSize;
-                accountRequest.PageToken = pageToken;
+                var productRequest = _contentService.Products.List(_options.MerchantId);
+                productRequest.MaxResults = _options.MaxListPageSize;
+                productRequest.PageToken = pageToken;
 
-                var productsResponse = await accountRequest.ExecuteAsync(cancellationToken);
+                var productsResponse = await productRequest.ExecuteAsync(cancellationToken);
 
                 if (productsResponse.Resources != null && productsResponse.Resources.Count != 0)
                 {
@@ -74,7 +75,7 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public ChannelReader<Product> GetChannelAsync(CancellationToken cancellationToken)
+        public ChannelReader<Product> GetChannel(CancellationToken cancellationToken)
         {
             var output = Channel.CreateUnbounded<Product>();
             Task.Run(async () =>
@@ -121,66 +122,35 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public async Task<IList<ProductStatus>> GetStatusesAsync(CancellationToken cancellationToken)
-        {
-            string? pageToken = null;
-            var result = new List<ProductStatus>();
-            do
-            {
-                var accountRequest = _contentService.Productstatuses.List(_options.MerchantId);
-                accountRequest.MaxResults = _options.MaxListPageSize;
-                accountRequest.PageToken = pageToken;
-
-                var productsResponse = await accountRequest.ExecuteAsync(cancellationToken);
-
-                if (productsResponse.Resources != null
-                    && productsResponse.Resources.Count != 0)
-                {
-                    result.AddRange(productsResponse.Resources);
-                }
-                else
-                {
-                    _logger.LogInformation("No accounts found.");
-                }
-
-                pageToken = productsResponse.NextPageToken;
-            }
-            while (pageToken != null);
-
-            return result;
-        }
-
-        /// <inheritdoc/>
-        public async Task<Product> UpInsertAsync(Product product, CancellationToken cancellationToken)
-        {
-            return await _contentService.Products.Insert(product, _options.MerchantId).ExecuteAsync(cancellationToken);
-        }
-
-        /// <inheritdoc/>
         public async Task<IDictionary<long, (Product product, Errors errors)>> UpInsertBatchAsync(
             IDictionary<long, Product> productList,
             CancellationToken cancellationToken)
         {
             var result = new Dictionary<long, (Product product, Errors errors)>();
 
-            var batchRequest = new ProductsCustomBatchRequest
+            ProductsCustomBatchRequest Request(GoogleShoppingOptions options)
             {
-                Entries = new List<ProductsCustomBatchRequestEntry>()
-            };
-
-            foreach (var item in productList)
-            {
-                var entry = new ProductsCustomBatchRequestEntry
+                var batchRequest = new ProductsCustomBatchRequest
                 {
-                    BatchId = item.Key,
-                    MerchantId = _options.MerchantId,
-                    Method = "insert",
-                    Product = item.Value
+                    Entries = new List<ProductsCustomBatchRequestEntry>()
                 };
-                batchRequest.Entries.Add(entry);
+
+                foreach (var item in productList)
+                {
+                    var entry = new ProductsCustomBatchRequestEntry
+                    {
+                        BatchId = item.Key,
+                        MerchantId = options.MerchantId,
+                        Method = "insert",
+                        Product = item.Value
+                    };
+                    batchRequest.Entries.Add(entry);
+                }
+
+                return batchRequest;
             }
 
-            var response = await _contentService.Products.Custombatch(batchRequest).ExecuteAsync(cancellationToken);
+            var response = await ExecuteBatchAsync(Request, cancellationToken);
 
             if (response.Kind == "content#productsCustomBatchResponse")
             {
@@ -199,6 +169,71 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
+        public ChannelReader<(Product product, Errors errors)> UpInsertBatch(ChannelReader<Product> channel, CancellationToken cancellationToken)
+        {
+            var output = Channel.CreateUnbounded<(Product product, Errors errors)>();
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    async Task<ProductsCustomBatchRequest> RequestAsync(GoogleShoppingOptions options)
+                    {
+                        var batchRequest = new ProductsCustomBatchRequest
+                        {
+                            Entries = new List<ProductsCustomBatchRequestEntry>()
+                        };
+
+                        var batchId = 0;
+                        while (await channel.WaitToReadAsync(cancellationToken))
+                        {
+                            var item = await channel.ReadAsync(cancellationToken);
+
+                            var entry = new ProductsCustomBatchRequestEntry
+                            {
+                                BatchId = batchId,
+                                MerchantId = options.MerchantId,
+                                Method = "insert",
+                                Product = item
+                            };
+                            batchRequest.Entries.Add(entry);
+                            ++batchId;
+                        }
+
+                        return batchRequest;
+                    }
+
+                    var response = await ExecuteBatchAsync(RequestAsync, cancellationToken);
+
+                    if (response.Kind == "content#productsCustomBatchResponse")
+                    {
+                        for (var i = 0; i < response.Entries.Count; i++)
+                        {
+                            var insertedProduct = response.Entries[i].Product;
+                            await output.Writer.WriteAsync((insertedProduct, response.Entries[i].Errors), cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("There was an error. Response: {responseCode}", response.ToString());
+                    }
+                }
+                finally
+                {
+                    output.Writer.Complete();
+                }
+            });
+
+            return output;
+        }
+
+        /// <inheritdoc/>
+        public async Task<Product> UpInsertAsync(Product product, CancellationToken cancellationToken)
+        {
+            return await _contentService.Products.Insert(product, _options.MerchantId).ExecuteAsync(cancellationToken);
+        }
+
+        /// <inheritdoc/>
         public async Task<string> DeleteAsync(string productId, CancellationToken cancellationToken)
         {
             return await _contentService.Products.Delete(_options.MerchantId, productId).ExecuteAsync(cancellationToken);
@@ -209,24 +244,29 @@ namespace Bet.Google.ShoppingContent.Services
         {
             var result = new Dictionary<long, string>();
 
-            var batchRequest = new ProductsCustomBatchRequest
+            ProductsCustomBatchRequest Request(GoogleShoppingOptions options)
             {
-                Entries = new List<ProductsCustomBatchRequestEntry>()
-            };
-
-            foreach (var item in productIdList)
-            {
-                var entry = new ProductsCustomBatchRequestEntry
+                var batchRequest = new ProductsCustomBatchRequest
                 {
-                    BatchId = item.Key,
-                    MerchantId = _options.MerchantId,
-                    Method = "delete",
-                    ProductId = item.Value
+                    Entries = new List<ProductsCustomBatchRequestEntry>()
                 };
-                batchRequest.Entries.Add(entry);
+
+                foreach (var item in productIdList)
+                {
+                    var entry = new ProductsCustomBatchRequestEntry
+                    {
+                        BatchId = item.Key,
+                        MerchantId = options.MerchantId,
+                        Method = "delete",
+                        ProductId = item.Value
+                    };
+                    batchRequest.Entries.Add(entry);
+                }
+
+                return batchRequest;
             }
 
-            var response = await _contentService.Products.Custombatch(batchRequest).ExecuteAsync(cancellationToken);
+            var response = await ExecuteBatchAsync(Request, cancellationToken);
 
             if (response.Kind == "content#productsCustomBatchResponse")
             {
@@ -253,6 +293,108 @@ namespace Bet.Google.ShoppingContent.Services
             {
                 _logger.LogError("There was an error. Response: {response}", response);
             }
+
+            return result;
+        }
+
+        /// <inheritdoc/>
+        public ChannelReader<(long batchId, string productId)> Delete(ChannelReader<string> channel, CancellationToken cancellationToken)
+        {
+            var output = Channel.CreateUnbounded<(long batchId, string productId)>();
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    async Task<ProductsCustomBatchRequest> RequestAsync(GoogleShoppingOptions options)
+                    {
+                        var batchRequest = new ProductsCustomBatchRequest
+                        {
+                            Entries = new List<ProductsCustomBatchRequestEntry>()
+                        };
+
+                        var batchId = 0;
+                        while (await channel.WaitToReadAsync(cancellationToken))
+                        {
+                            var item = await channel.ReadAsync(cancellationToken);
+
+                            var entry = new ProductsCustomBatchRequestEntry
+                            {
+                                BatchId = batchId,
+                                MerchantId = options.MerchantId,
+                                Method = "delete",
+                                ProductId = item
+                            };
+                            batchRequest.Entries.Add(entry);
+                            ++batchId;
+                        }
+
+                        return batchRequest;
+                    }
+
+                    var response = await ExecuteBatchAsync(RequestAsync, cancellationToken);
+
+                    if (response.Kind == "content#productsCustomBatchResponse")
+                    {
+                        for (var i = 0; i < response.Entries.Count; i++)
+                        {
+                            var errors = response.Entries[i].Errors;
+                            var flatError = string.Empty;
+                            if (errors != null)
+                            {
+                                for (var j = 0; j < errors.ErrorsValue.Count; j++)
+                                {
+                                    flatError += errors.ErrorsValue[j].ToString();
+                                }
+                            }
+                            else
+                            {
+                                _logger.LogDebug("Product deleted, batchId {0}", response.Entries[i].BatchId);
+                            }
+
+                            await output.Writer.WriteAsync((response.Entries[i].BatchId ?? 0, flatError), cancellationToken);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogError("There was an error. Response: {response}", response);
+                    }
+                }
+                finally
+                {
+                    output.Writer.Complete();
+                }
+            });
+
+            return output;
+        }
+
+        /// <inheritdoc/>
+        public async Task<IList<ProductStatus>> GetStatusesAsync(CancellationToken cancellationToken)
+        {
+            string? pageToken = null;
+            var result = new List<ProductStatus>();
+            do
+            {
+                var accountRequest = _contentService.Productstatuses.List(_options.MerchantId);
+                accountRequest.MaxResults = _options.MaxListPageSize;
+                accountRequest.PageToken = pageToken;
+
+                var productsResponse = await accountRequest.ExecuteAsync(cancellationToken);
+
+                if (productsResponse.Resources != null
+                    && productsResponse.Resources.Count != 0)
+                {
+                    result.AddRange(productsResponse.Resources);
+                }
+                else
+                {
+                    _logger.LogInformation("No accounts found.");
+                }
+
+                pageToken = productsResponse.NextPageToken;
+            }
+            while (pageToken != null);
 
             return result;
         }
@@ -304,7 +446,7 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public ChannelReader<(long batchId, ProductStatus productStatus)> GetStatusesChannelAsync(
+        public ChannelReader<(long batchId, ProductStatus productStatus)> GetStatusesChannel(
             ChannelReader<(long batchId, string productId)> channel,
             CancellationToken cancellationToken)
         {
@@ -358,7 +500,7 @@ namespace Bet.Google.ShoppingContent.Services
         }
 
         /// <inheritdoc/>
-        public ChannelReader<ProductStatus> GetStatusesChannelAsync(CancellationToken cancellationToken)
+        public ChannelReader<ProductStatus> GetStatusesChannel(CancellationToken cancellationToken)
         {
             var output = Channel.CreateUnbounded<ProductStatus>();
 
@@ -404,6 +546,25 @@ namespace Bet.Google.ShoppingContent.Services
             });
 
             return output;
+        }
+
+        /// <inheritdoc/>
+        public async Task<ProductsCustomBatchResponse> ExecuteBatchAsync(
+            Func<GoogleShoppingOptions, ProductsCustomBatchRequest> request,
+            CancellationToken cancellationToken)
+        {
+            var batchRequest = request(_options);
+
+            return await _contentService.Products.Custombatch(batchRequest).ExecuteAsync(cancellationToken);
+        }
+
+        public async Task<ProductsCustomBatchResponse> ExecuteBatchAsync(
+            Func<GoogleShoppingOptions, Task<ProductsCustomBatchRequest>> requestAsync,
+            CancellationToken cancellationToken)
+        {
+            var batchRequest = await requestAsync(_options);
+
+            return await _contentService.Products.Custombatch(batchRequest).ExecuteAsync(cancellationToken);
         }
     }
 }

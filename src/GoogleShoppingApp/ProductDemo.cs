@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -15,8 +14,6 @@ using Google.Apis.ShoppingContent.v2_1.Data;
 
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Primitives;
-using Microsoft.VisualBasic.CompilerServices;
 
 namespace GoogleShoppingApp
 {
@@ -45,7 +42,7 @@ namespace GoogleShoppingApp
             try
             {
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _applicationLifetime.ApplicationStopping);
-                var channel = _productService.GetChannelAsync(linkedCts.Token);
+                var channel = _productService.GetChannel(linkedCts.Token);
 
                 await foreach (var item in channel.ReadAllAsync(linkedCts.Token))
                 {
@@ -101,7 +98,7 @@ namespace GoogleShoppingApp
 
                     requestChannel.Writer.Complete();
 
-                    var respChannel = _productService.GetStatusesChannelAsync(requestChannel, linkedCts.Token);
+                    var respChannel = _productService.GetStatusesChannel(requestChannel, linkedCts.Token);
 
                     await foreach (var (batchId, productStatus) in respChannel.ReadAllAsync(cancellationToken))
                     {
@@ -143,7 +140,7 @@ namespace GoogleShoppingApp
 
                 await Task.Run(async () =>
                 {
-                    var prodChannel = _productService.GetChannelAsync(linkedCts.Token);
+                    var prodChannel = _productService.GetChannel(linkedCts.Token);
 
                     var batchId = 0;
 
@@ -157,7 +154,7 @@ namespace GoogleShoppingApp
 
                         statusChannel.Writer.Complete();
 
-                        var statuses = _productService.GetStatusesChannelAsync(statusChannel, linkedCts.Token);
+                        var statuses = _productService.GetStatusesChannel(statusChannel, linkedCts.Token);
 
                         while (await statuses.WaitToReadAsync(linkedCts.Token))
                         {
